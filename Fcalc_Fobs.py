@@ -1,10 +1,9 @@
-from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow, QPushButton, QInputDialog, QLineEdit, QFileDialog, QCheckBox, QButtonGroup, QMessageBox
+from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow, QPushButton, QInputDialog, QLineEdit, QFileDialog, QCheckBox, QButtonGroup, QMessageBox, QComboBox 
 from PyQt5.QtGui import QIcon, QDoubleValidator
 from PyQt5 import QtCore
-import sys
+import sys, traceback, os
 import cctbx
 import numpy as np
-import os
 import pandas as pd
 import iotbx.pdb as pdb
 import iotbx.cif as cif
@@ -21,8 +20,9 @@ class Main_Window(QMainWindow):
 		self.pdb_name = ""
 		self.fcf_name = ""
 		self.cif_name = ""
-		self.resolution = 1
+		self.resolution = 1.8
 		self.scaling_factor = 1
+		self.scatfact_table = 'electron'
 		self.initUI()
 		self.home()
 		self.show()
@@ -40,10 +40,6 @@ class Main_Window(QMainWindow):
 		options |= QFileDialog.DontUseNativeDialog
 		self.mtz_name, _ = QFileDialog.getOpenFileName(self,"Chooose an MTZ file", "","All Files (*);;MTZ Files (*.mtz)", options=options)
 		self.textbox1.setText(self.mtz_name)
-		msgBox = QMessageBox()
-		msgBox.setText("Successfully found MTZ file.")
-		msgBox.setWindowTitle("MTZ File")
-		msgBox.exec_()
 
 	def mtz_text_editor_enter(self):
 		tmp = self.textbox1.text()
@@ -62,10 +58,6 @@ class Main_Window(QMainWindow):
 		options |= QFileDialog.DontUseNativeDialog
 		self.pdb_name, _ = QFileDialog.getOpenFileName(self,"Choose a PDB file", "","All Files (*);;PDB Files (*.pdb)", options=options)
 		self.textbox2.setText(self.pdb_name)
-		msgBox = QMessageBox()
-		msgBox.setText("Successfully found PDB file.")
-		msgBox.setWindowTitle("PDB File")
-		msgBox.exec_()
 	def pdb_text_editor_enter(self):
 		tmp = self.textbox2.text()
 		if os.path.isfile(tmp):
@@ -82,10 +74,6 @@ class Main_Window(QMainWindow):
 		options |= QFileDialog.DontUseNativeDialog
 		self.fcf_name, _ = QFileDialog.getOpenFileName(self,"Choose an FCF file", "","All Files (*);;FCF Files (*.fcf)", options=options)
 		self.textbox3.setText(self.fcf_name)
-		msgBox = QMessageBox()
-		msgBox.setText("Successfully found FCF file.")
-		msgBox.setWindowTitle("FCF File")
-		msgBox.exec_()
 	def fcf_text_editor_enter(self):
 		tmp = self.textbox3.text()
 		if os.path.isfile(tmp):
@@ -102,10 +90,6 @@ class Main_Window(QMainWindow):
 		options |= QFileDialog.DontUseNativeDialog
 		self.cif_name, _ = QFileDialog.getOpenFileName(self,"Choose a CIF file", "","All Files (*);;CIF Files (*.cif)", options=options)
 		self.textbox4.setText(self.cif_name)
-		msgBox = QMessageBox()
-		msgBox.setText("Successfully found CIF file.")
-		msgBox.setWindowTitle("CIF File")
-		msgBox.exec_()
 	def cif_text_editor_enter(self):
 		tmp = self.textbox4.text()
 		if os.path.isfile(tmp):
@@ -118,19 +102,45 @@ class Main_Window(QMainWindow):
 		
 	#Set resolution
 	def set_resolution(self):
-		self.resolution = float(self.textbox5.text())
-		msgBox = QMessageBox()
-		msgBox.setText("Successfully set the resolution to {}".format(self.resolution))
-		msgBox.setWindowTitle("Resolution")
-		msgBox.exec_()
-		
+		try:
+			self.resolution = float(self.textbox5.text())
+			msgBox = QMessageBox()
+			msgBox.setText("Successfully set the resolution to {}".format(self.resolution))
+			msgBox.setWindowTitle("Resolution")
+			msgBox.exec_()
+		except:
+			msgBox = QMessageBox()
+			msgBox.setIcon(QMessageBox.Critical)
+			msgBox.setText("An Error Has Ocurred while trying to set resolution! Please check if you input the proper number.")
+			msgBox.setWindowTitle("Error")
+			msgBox.exec_()
+			
 	def set_wilson_scaling_factor(self):
-		self.scaling_factor = float(self.textbox6.text())
-		msgBox = QMessageBox()
-		msgBox.setText("Successfully set scaling factor to {}".format(self.scaling_factor))
-		msgBox.setWindowTitle("Scaling Factor")
-		msgBox.exec_()
-		
+		try:
+			self.scaling_factor = float(self.textbox6.text())
+			msgBox = QMessageBox()
+			msgBox.setText("Successfully set scaling factor to {}".format(self.scaling_factor))
+			msgBox.setWindowTitle("Scaling Factor")
+			msgBox.exec_()
+		except:
+			msgBox = QMessageBox()
+			msgBox.setIcon(QMessageBox.Critical)
+			msgBox.setText("An Error Has Ocurred while trying to set the wilson scaling factor! Please check if you input the proper number.")
+			msgBox.setWindowTitle("Error")
+			msgBox.exec_()
+	
+	def save_fobs_fcalc():
+		try:
+			options = QFileDialog.Options()
+			options |= QFileDialog.DontUseNativeDialog
+			self.cif_name, _ = QFileDialog.getSaveFileName(self,"Save Fobs Fcalc", "","JSON Files (*.json);;All Files (*)", options=options)
+		except:
+			msgBox = QMessageBox()
+			msgBox.setIcon(QMessageBox.Critical)
+			msgBox.setText("An Error Has Ocurred while trying to save fobs and fcalc! Please check if you input the proper number.")
+			msgBox.setWindowTitle("Error")
+			msgBox.exec_()
+	
 	def home(self):
 		#quit button
 		btn1 = QPushButton("Quit", self)
@@ -216,7 +226,6 @@ class Main_Window(QMainWindow):
 		self.cb1 = QCheckBox('Calc Fcalc from PDB', self)
 		self.cb1.move(10, 170)
 		self.cb1.resize(145, 20)
-		self.cb1.toggle()
 		self.cb1.setAutoExclusive(1)
 		#2 get Fcalc by calculating the structure factor from cif file
 		self.cb2 = QCheckBox('Calc Fcalc from CIF', self)
@@ -227,6 +236,7 @@ class Main_Window(QMainWindow):
 		self.cb3 = QCheckBox('Get Fcalc from MTZ', self)
 		self.cb3.move(305, 170)
 		self.cb3.resize(145, 20)
+		self.cb3.toggle()
 		self.cb3.setAutoExclusive(1)
 		#4 get Fcalc from fcf file
 		self.cb4 = QCheckBox('Get Fcalc from FCF', self)
@@ -262,69 +272,124 @@ class Main_Window(QMainWindow):
 		self.textbox5.move(10, 230)
 		self.textbox5.resize(60, 35)
 		self.textbox5.setValidator(QDoubleValidator(self,bottom=0,top=500,decimals=2))
-		btn6 = QPushButton("Set Resolution", self)
-		btn6.move(75, 230)
-		btn6.resize(100, 35)
-		btn6.clicked.connect(self.set_resolution)
+		self.textbox5.setText(str(self.resolution))
+		btn7 = QPushButton("Set Resolution", self)
+		btn7.move(75, 230)
+		btn7.resize(100, 35)
+		btn7.clicked.connect(self.set_resolution)
 		
 		#Overall wilson plot scaling factor
 		self.textbox6 = QLineEdit(self)
 		self.textbox6.move(10, 270)
-		self.textbox6.resize(60, 35)
+		self.textbox6.resize(60, 36)
 		self.textbox6.setValidator(QDoubleValidator(self,bottom=-500,top=500,decimals=4))
-		btn6 = QPushButton("Set Wilson\nFactor", self)
-		btn6.move(75, 270)
-		btn6.resize(100, 35)
-		btn6.clicked.connect(self.set_wilson_scaling_factor)
+		self.textbox6.setText(str(self.scaling_factor))
+		btn8 = QPushButton("Set Wilson\nFactor", self)
+		btn8.move(75, 270)
+		btn8.resize(100, 36)
+		btn8.clicked.connect(self.set_wilson_scaling_factor)
+		
+		#Save the Fobs and Fcalc as text file
+		btn9 = QPushButton("Save", self)
+		btn9.move(270, 340)
+		btn9.resize(100, 50)
+		btn9.clicked.connect(self.save_fobs_fcalc)
+		
+		#Combobox to select scattering factors
+		self.combo = QComboBox(self)
+		self.combo.addItem('electron','electron')
+		self.combo.addItem('xray-wk1995','wk1995')
+		self.combo.addItem('xray-it1992','it1992')
+		self.combo.move(185,230)
+		self.combo.resize(150,35)
 		
 	def plot_Fcalc_Fobs(self):
-		if self.cb1_1.checkState():#1 get Fobs from mtz file
-			mtz_file = read_mtz(self.mtz_name)
-			Fobs = mtz_file.as_miller_arrays()[2]
-			Fobs_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fobs.indices()),\
-								data=np.array(Fobs.data()*self.scaling_factor))
+		try:
+			if self.cb1_1.checkState():#1 get Fobs from mtz file
+				mtz_file = read_mtz(self.textbox1.text())
+				Fobs = mtz_file.as_miller_arrays()[2]
+				Fobs_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fobs.indices()),\
+									data=np.array(Fobs.data()*self.scaling_factor))
+			elif self.cb2_1.checkState():#2 get Fobs from fcf file
+				fcf_file = read_fcf(self.textbox3.text())
+				model = dict(fcf_file.file_content().model().items()[0][1])
+				if model['_shelx_refln_list_code'] is '6':
+					Fobs = fcf_file.as_miller_arrays()[1] #This Fobs is Fobs^2 but in order to be more convinient for me just call it Fobs
+					Fobs_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fobs.indices()),\
+									data=np.sqrt(Fobs.data())*self.scaling_factor)
+				elif model['_shelx_refln_list_code'] is '4':
+					Fobs = fcf_file.as_miller_arrays()[1] #This Fobs is Fobs^2 but in order to be more convinient for me just call it Fobs
+					Fobs_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fobs.indices()),\
+									data=np.sqrt(Fobs.data())*self.scaling_factor)
+				elif model['_shelx_refln_list_code'] is '3':
+					Fobs = fcf_file.as_miller_arrays()[1]
+					Fobs_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fobs.indices()),\
+									data=np.array(Fobs.data())*self.scaling_factor)
 
-		elif self.cb2_1.checkState():#2 get Fobs from fcf file
-			fcf_file = read_fcf(self.fcf_name)
-		
 		#-------------------------------------------------------------------------------
-		if self.cb1.checkState():#1 get Fcalc by calculating the structure factor from pdb file
-			pdb_structure = read_pdb(self.pdb_name)
-			Fcalc = calc_structure_factors(pdb_structure,dmin=self.resolution)
-			Fcalc_data = Fcalc.data()
-			Fcalc_indices = Fcalc.indices()
-			Fcalc_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fcalc_indices),data=np.abs(Fcalc_data))
-			
-		elif self.cb2.checkState():#2 get Fcalc by calculating the structure factor from cif file
-			cif_structures = read_cif(self.cif_name)
-			for name, cif_structure in cif_sturctures.items():
-				Fcalc = f_calc_structure_factors(cif_structure,dmin=self.resolution,scatfact_table='electron',\
-											return_as="miller",verbose=True)
-				break #abandon any more structures in the cif file, if there is any, only read the first one
-			Fcalc_data = Fcalc.data()
-			Fcalc_indices = Fcalc.indices()
-			Fcalc_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fcalc_indices),data=np.abs(Fcalc_data))
-			
-		elif self.cb3.checkState():#3 get Fcalc from mtz file
-			if not self.cb1_1.checkState():
-				mtz_file = read_mtz(self.mtz_name)
-			Fcalc = mtz_file.as_miller_arrays()[3]
-			Fcalc_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fcalc.indices()),data=np.abs(Fcalc.data()))
-
-		elif self.cb4.checkState():#4 get Fcalc from fcf file
-			if not self.cb2_1.checkState():
-				fcf_file = read_fcf(self.fcf_name)
+			if self.cb1.checkState():#1 get Fcalc by calculating the structure factor from pdb file
+				self.scatfact_table = str(self.combo.currentData())
+				pdb_structure = read_pdb(self.textbox2.text())
+				Fcalc = calc_structure_factors(pdb_structure,dmin=self.resolution,table=self.scatfact_table)
+				Fcalc_data = Fcalc.data()
+				Fcalc_indices = Fcalc.indices()
+				Fcalc_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fcalc_indices),data=np.abs(Fcalc_data))
 				
-		merged_x = []
-		merged_y = []
-		for i in Fobs.indices():
-			merged_x.append(Fobs_DF.loc[i][0])
-			merged_y.append(Fcalc_DF.loc[i][0])
+			elif self.cb2.checkState():#2 get Fcalc by calculating the structure factor from cif file
+				self.scatfact_table = str(self.combo.currentData())
+				cif_structures = read_cif(str(self.textbox4.text()))
+				for name, cif_structure in cif_structures.items():
+					Fcalc = calc_structure_factors(cif_structure,dmin=self.resolution,table=self.scatfact_table)
+					break #abandon any more structures in the cif file, if there is any, only read the first one
+				Fcalc_P1 = Fcalc.expand_to_p1()
+				Fcalc_data = Fcalc_P1.data()
+				Fcalc_indices = Fcalc_P1.indices()
+				Fcalc_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fcalc_indices),data=np.abs(Fcalc_data))
+				
+			elif self.cb3.checkState():#3 get Fcalc from mtz file
+				if not self.cb1_1.checkState():
+					mtz_file = read_mtz(self.textbox1.text())
+				Fcalc = mtz_file.as_miller_arrays()[3]
+				Fcalc_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fcalc.indices()),data=np.abs(Fcalc.data()))
+
+			elif self.cb4.checkState():#4 get Fcalc from fcf file
+				if not self.cb2_1.checkState():
+					fcf_file = read_fcf(self.textbox3.text())
+					model = dict(fcf_file.file_content().model().items()[0][1])
+					
+				if model['_shelx_refln_list_code'] is '6':
+					Fcalc = fcf_file.as_miller_arrays()[0]
+					Fcalc_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fcalc.indices()),\
+									data=np.abs(Fcalc.data())*self.scaling_factor)
+				elif model['_shelx_refln_list_code'] is '4':
+					Icalc = fcf_file.as_miller_arrays()[0]
+					Fcalc_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Icalc.indices()),\
+									data=np.sqrt(Icalc.data())*self.scaling_factor)
+				elif model['_shelx_refln_list_code'] is '3':
+					Fcalc = fcf_file.as_miller_arrays()[0]
+					Fcalc_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fcalc.indices()),\
+									data=np.abs(Fcalc.data())*self.scaling_factor)
+				
+		#-------------------------------------------------------------------------------
+			merged_x = []
+			merged_y = []
+			for i in Fobs.indices():
+				merged_x.append(Fobs_DF.loc[i][0])
+				merged_y.append(Fcalc_DF.loc[i][0])
+				
+			plt.figure()
+			x2, y2 = pd.Series(merged_x, name="F_obs"), pd.Series(merged_y, name="F_model")
+			ax = sns.regplot(x=x2, y=y2, marker='+')
+			plt.show()
 			
-		plt.figure()
-		x2, y2 = pd.Series(merged_x, name="F_obs"), pd.Series(merged_y, name="F_model")
-		ax = sns.regplot(x=x2, y=y2, marker='+')
-		plt.show()
+		except Exception as e:
+			exc_type, exc_obj, exc_tb = sys.exc_info()
+			tb = traceback.extract_tb(exc_tb)[0]
+			msgBox = QMessageBox()
+			msgBox.setIcon(QMessageBox.Critical)
+			msgBox.setText("An Error Has Ocurred!\n{}\nAt Line: {} In Function: {}".format(e.args[0], str(tb[1]), tb[2]))
+			msgBox.setWindowTitle("Error")
+			msgBox.exec_()
 			
 def read_pdb(f):
     #read a pdb file
@@ -343,7 +408,7 @@ def read_cif(f):
 	#read a cif file  One cif file can contain multiple structures
 	try:
 		if isinstance(f,str):
-			structures=cif.reader(file_name=f,raise_sorry_if_format_error=True).build_crystal_structures()
+			structures=cif.reader(file_path=f,raise_if_errors=True).build_crystal_structures()
 		else:
 			raise TypeError,'read_cif: Cannot deal is type {}'.format(type(f))
 	except libtbx.utils.Sorry as e:
@@ -358,7 +423,7 @@ def read_mtz(f):
 	
 def read_fcf(f):
 	#read an fcf file
-	pass
+	return any_reflection_file(str(f))
 
 def f_calc_structure_factors(structure,**kwargs):
     """Takes cctbx structure and returns f_calc miller array
