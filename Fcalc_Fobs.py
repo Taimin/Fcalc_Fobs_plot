@@ -5,10 +5,10 @@ Created on Wed Oct 11 14:00:27 2017
 @author: Taimin Yang
 """
 
-from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow, QPushButton, QInputDialog, QLineEdit, QFileDialog, QCheckBox, QButtonGroup, QMessageBox, QComboBox 
+from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow, QPushButton, QInputDialog, QLineEdit, QFileDialog, QCheckBox, QButtonGroup, QMessageBox, QComboBox, QTextBrowser
 from PyQt5.QtGui import QIcon, QDoubleValidator
 from PyQt5 import QtCore
-import sys, traceback, os
+import sys, traceback, os, subprocess
 import json
 import cctbx
 import numpy as np
@@ -66,13 +66,15 @@ class Main_Window(QMainWindow):
 		#read an mtz file
 		return any_reflection_file(str(f))
 	def show_mtz(self):
-		#try:
-		self.F_Window = File_Window(str(self.mtz_name))
-		#except:
-		#	msgBox = QMessageBox()
-		#	msgBox.setText("Failed to show MTZ file. \nPlease check if your path is right.")
-		#	msgBox.setWindowTitle("MTZ File")
-		#	msgBox.exec_()
+		try:
+			subprocess.call(['viewhkl',str(self.mtz_name)])
+		except:
+			msgBox = QMessageBox()
+			msgBox.setIcon(QMessageBox.Critical)
+			msgBox.setText("An Error Has Ocurred While Trying To Show This File!")
+			msgBox.setWindowTitle("Error")
+			msgBox.exec_()
+
 	
 	#Operations about PDB file
 	def load_pdb(self):
@@ -105,7 +107,7 @@ class Main_Window(QMainWindow):
 			exit()
 		return structures
 	def show_pdb(self):
-		pass
+		self.F_Window = File_Window(str(self.pdb_name))
 		
 	#Operations about FCF file
 	def load_fcf(self):
@@ -128,8 +130,8 @@ class Main_Window(QMainWindow):
 	def read_fcf(self,f):
 		#read an fcf file
 		return any_reflection_file(str(f))
-	def show_fcf(f):
-		pass
+	def show_fcf(self):
+		self.F_Window = File_Window(str(self.fcf_name))
 		
 	#Operations about CIF file
 	def load_cif(self):
@@ -161,8 +163,11 @@ class Main_Window(QMainWindow):
 			print "Error parsing cif file, check if the data tag does not contain any spaces."
 			exit()
 		return structures
+	def read_cif_reflections(self,f):
+		#read an cif reflection file
+		return any_reflection_file(str(f))
 	def show_cif(self):
-		pass
+		self.F_Window = File_Window(str(self.cif_name))
 		
 	#Set resolution
 	def set_resolution(self):
@@ -399,10 +404,15 @@ class Main_Window(QMainWindow):
 		self.cb2_1 = QCheckBox('Get Fobs from FCF', self)
 		self.cb2_1.move(160, 200)
 		self.cb2_1.resize(145, 20)
+		#3 get Fobs from CIF file
+		self.cb3_1 = QCheckBox('Get Fobs from CIF', self)
+		self.cb3_1.move(305, 200)
+		self.cb3_1.resize(145, 20)
 		#set a checkbox group to group the options for fobs
 		self.cb_group_fobs = QButtonGroup(self)
 		self.cb_group_fobs.addButton(self.cb1_1)
 		self.cb_group_fobs.addButton(self.cb2_1)
+		self.cb_group_fobs.addButton(self.cb3_1)
 		self.cb_group_fobs.setExclusive(1)
 		
 		#input textbox to set resolution
@@ -442,6 +452,8 @@ class Main_Window(QMainWindow):
 		self.combo.resize(150,35)
 		
 	def plot_Fcalc_Fobs(self):
+		self.resolution = float(self.textbox5.text())
+		self.scaling_factor = float(self.textbox6.text())
 		try:
 			if self.cb1_1.checkState():#1 get Fobs from mtz file
 				mtz_file = self.read_mtz(self.textbox1.text())
@@ -463,6 +475,11 @@ class Main_Window(QMainWindow):
 					Fobs = fcf_file.as_miller_arrays()[1]
 					Fobs_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fobs.indices()),\
 									data=np.array(Fobs.data())*self.scaling_factor)
+			elif self.cb3_1.checkState():
+				cif_file = self.read_cif_reflections(str(self.textbox4.text()))
+				Fobs = cif_file.as_miller_arrays()[0]
+				Fobs_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fobs.indices()),\
+									data=np.array(Fobs.data()*self.scaling_factor))
 
 		#-------------------------------------------------------------------------------
 			if self.cb1.checkState():#1 get Fcalc by calculating the structure factor from pdb file
@@ -509,16 +526,19 @@ class Main_Window(QMainWindow):
 									data=np.abs(Fcalc.data())*self.scaling_factor)
 				
 		#-------------------------------------------------------------------------------
-			merged_x = []
-			merged_y = []
+			merged_fobs = []
+			merged_fcalc = []
 			for i in Fobs.indices():
-				merged_x.append(Fobs_DF.loc[i][0])
-				merged_y.append(Fcalc_DF.loc[i][0])
-			plt.figure()
-			x2, y2 = pd.Series(merged_x, name="F_obs"), pd.Series(merged_y, name="F_model")
-			self.saved_Data['Fobs'] = merged_x
-			self.saved_Data['Fcalc'] = merged_y
-			ax = sns.regplot(x=x2, y=y2, marker='+')
+				merged_fobs.append(Fobs_DF.loc[i][0])
+				merged_fcalc.append(Fcalc_DF.loc[i][0])
+			ds = Fobs.d_spacings().data()
+			fig,ax = plt.subplots()
+			x2, y2 = pd.Series(merged_fobs, name="F_obs"), pd.Series(merged_fcalc, name="F_model")
+			self.saved_Data['Fobs'] = merged_fobs
+			self.saved_Data['Fcalc'] = merged_fcalc
+			sns.regplot(x=x2, y=y2, marker='+',ax=ax)
+			af =  AnnoteFinder(merged_fobs,merged_fcalc, zip(Fobs.indices(),ds), ax=ax)
+			fig.canvas.mpl_connect('button_press_event', af)
 			plt.show()
 			
 		except Exception as e:
@@ -534,8 +554,18 @@ class File_Window(QMainWindow):
 	def __init__(self,f):
 		super(File_Window,self).__init__()
 		self.initUI()
-		self.show_file(f)
-		self.show()
+		try:
+			if f.split('.')[-1].lower() not in ['mtz','pdb','fcf','cif']:
+				raise
+			self.home()
+			self.show_file(f)
+			self.show()
+		except:
+			msgBox = QMessageBox()
+			msgBox.setIcon(QMessageBox.Critical)
+			msgBox.setText("An Error Has Ocurred While Trying To Show This File!")
+			msgBox.setWindowTitle("Error")
+			msgBox.exec_()
 		
 	def initUI(self):
 		self.setGeometry(400, 400, 600, 800)
@@ -543,23 +573,89 @@ class File_Window(QMainWindow):
 		self.setWindowIcon(QIcon('gear-tools.png'))  
 		self.setWindowFlags(QtCore.Qt.WindowCloseButtonHint | QtCore.Qt.WindowMinimizeButtonHint)
 		
+	def home(self):
+		self.txt_browser = QTextBrowser(self)
+		self.txt_browser.resize(580,780)
+		self.txt_browser.move(10,10)
+		
 	def show_file(self,f):
 		appendix = f.split('.')[-1].lower()
-		print appendix, f
-		if appendix == 'mtz':
-			print f
-		elif appendix == 'pdb': 
-			pass
-		elif appendix == 'fcf':
-			pass
-		elif appendix == 'cif':
-			pass
-		else:
-			msgBox = QMessageBox()
-			msgBox.setIcon(QMessageBox.Critical)
-			msgBox.setText("An Error Has Ocurred while trying to show the {} file!".format(appendix.upper()))
-			msgBox.setWindowTitle("Error")
-			msgBox.exec_()
+		with open(f) as fp:
+			content = fp.read()
+		self.txt_browser.setText(content)
+		
+class AnnoteFinder(object):
+    """callback for matplotlib to display an annotation when points are
+    clicked on.  The point which is closest to the click and within
+    xtol and ytol is identified.
+    
+    Register this function like this:
+    
+    scatter(xdata, ydata)
+    af = AnnoteFinder(xdata, ydata, annotes)
+    connect('button_press_event', af)
+    """
+
+    def __init__(self, xdata, ydata, annotes, ax=None, xtol=None, ytol=None):
+        self.data = list(zip(xdata, ydata, annotes))
+        if xtol is None:
+            xtol = 10
+        if ytol is None:
+            ytol = 10
+        self.xtol = xtol
+        self.ytol = ytol
+        if ax is None:
+            self.ax = plt.gca()
+        else:
+            self.ax = ax
+        self.drawnAnnotations = {}
+        self.links = []
+
+    def distance(self, x1, x2, y1, y2):
+        """
+        return the distance between two points
+        """
+        return(np.sqrt((x1 - x2)**2 + (y1 - y2)**2))
+
+    def __call__(self, event):
+
+        if event.inaxes:
+
+            clickX = event.xdata
+            clickY = event.ydata
+            if (self.ax is None) or (self.ax is event.inaxes):
+                annotes = []
+                for x, y, a in self.data:
+                    if ((clickX-self.xtol < x < clickX+self.xtol) and
+                            (clickY-self.ytol < y < clickY+self.ytol)):
+                        annotes.append(
+                            (self.distance(x, clickX, y, clickY), x, y, a))
+                if annotes:
+                    annotes.sort()
+                    distance, x, y, annote = annotes[0]
+                    self.drawAnnote(event.inaxes, x, y, annote)
+                    for l in self.links:
+                        l.drawSpecificAnnote(annote)
+
+    def drawAnnote(self, ax, x, y, annote):
+        """
+        Draw the annotation on the plot
+        """
+        if (x, y) in self.drawnAnnotations:
+            markers = self.drawnAnnotations[(x, y)]
+            for m in markers:
+                m.set_visible(not m.get_visible())
+            self.ax.figure.canvas.draw_idle()
+        else:
+            t = ax.text(x, y, "%s %.2f" % (str(annote[0]),annote[1]),)
+            m = ax.scatter([x], [y], marker='+', c='r', zorder=100)
+            self.drawnAnnotations[(x, y)] = (t, m)
+            self.ax.figure.canvas.draw_idle()
+
+    def drawSpecificAnnote(self, annote):
+        annotesToDraw = [(x, y, a) for x, y, a in self.data if a == annote]
+        for x, y, a in annotesToDraw:
+            self.drawAnnote(self.ax, x, y, a)
 		
 if __name__ == "__main__":
 	app = QApplication(sys.argv)
