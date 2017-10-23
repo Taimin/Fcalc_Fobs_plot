@@ -17,6 +17,7 @@ import iotbx.pdb as pdb
 import iotbx.cif as cif
 import libtbx.utils
 import matplotlib.pyplot as plt
+from matplotlib.widgets import Button
 from iotbx.reflection_file_reader import any_reflection_file
 import seaborn as sns; sns.set(color_codes=True)
 
@@ -47,7 +48,7 @@ class Main_Window(QMainWindow):
 	def load_mtz(self):
 		options = QFileDialog.Options()
 		options |= QFileDialog.DontUseNativeDialog
-		self.mtz_name, _ = QFileDialog.getOpenFileName(self,"Chooose an MTZ file", "","MTZ Files (*.mtz);;All Files (*)", options=options)
+		self.mtz_name, _ = QFileDialog.getOpenFileName(self,"Choose an MTZ file", "","MTZ Files (*.mtz);;All Files (*)", options=options)
 		self.textbox1.setText(self.mtz_name)
 	def mtz_text_editor_enter(self):
 		tmp = self.textbox1.text()
@@ -539,6 +540,12 @@ class Main_Window(QMainWindow):
 			sns.regplot(x=x2, y=y2, marker='+',ax=ax)
 			af =  AnnoteFinder(merged_fobs,merged_fcalc, zip(Fobs.indices(),ds), ax=ax)
 			fig.canvas.mpl_connect('button_press_event', af)
+			axfit = plt.axes([0.8, 0.9, 0.12, 0.075])
+			bfit = PLTButtonClickProcessor(axfit, 'Fit')
+			axclear = plt.axes([0.65, 0.9, 0.12, 0.075])
+			bclear = PLTButtonClickProcessor(axclear, 'Clear')
+			axchoose = plt.axes([0.50, 0.9, 0.12, 0.075])
+			bclear = PLTButtonClickProcessor(axchoose, 'Choose')
 			plt.show()
 			
 		except Exception as e:
@@ -583,6 +590,26 @@ class File_Window(QMainWindow):
 		with open(f) as fp:
 			content = fp.read()
 		self.txt_browser.setText(content)
+		
+class PLTButtonClickProcessor(object):
+	def __init__(self,axes,label):
+		self.label = label
+		self.button = Button(axes, label)
+		self.button.on_clicked(self.process)
+		
+	def process(self,event):
+		if self.label == 'Choose':
+			self.pts_chosen = plt.ginput(n=-1,timeout=-1,show_clicks=True)
+		elif self.label == 'Clear':
+			pass
+		elif self.label == 'Fit':
+			pass
+		else:
+			msgBox = QMessageBox()
+			msgBox.setIcon(QMessageBox.Critical)
+			msgBox.setText("An Error Has Ocurred While Trying To Execute This Process!")
+			msgBox.setWindowTitle("Error")
+			msgBox.exec_()
 		
 class AnnoteFinder(object):
     """callback for matplotlib to display an annotation when points are
@@ -656,6 +683,7 @@ class AnnoteFinder(object):
         annotesToDraw = [(x, y, a) for x, y, a in self.data if a == annote]
         for x, y, a in annotesToDraw:
             self.drawAnnote(self.ax, x, y, a)
+			
 		
 if __name__ == "__main__":
 	app = QApplication(sys.argv)
