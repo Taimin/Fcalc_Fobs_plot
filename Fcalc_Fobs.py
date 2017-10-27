@@ -17,9 +17,12 @@ import iotbx.pdb as pdb
 import iotbx.cif as cif
 import libtbx.utils
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Button
+from matplotlib.path import Path
+from matplotlib.figure import Figure
 from iotbx.reflection_file_reader import any_reflection_file
 import seaborn as sns; sns.set(color_codes=True)
+from sklearn import linear_model
+from sklearn.metrics import mean_squared_error,r2_score
 
 class Main_Window(QMainWindow):
     
@@ -527,6 +530,7 @@ class Main_Window(QMainWindow):
 									data=np.abs(Fcalc.data())*self.scaling_factor)
 				
 		#-------------------------------------------------------------------------------
+		
 			merged_fobs = []
 			merged_fcalc = []
 			for i in Fobs.indices():
@@ -537,15 +541,10 @@ class Main_Window(QMainWindow):
 			x2, y2 = pd.Series(merged_fobs, name="F_obs"), pd.Series(merged_fcalc, name="F_model")
 			self.saved_Data['Fobs'] = merged_fobs
 			self.saved_Data['Fcalc'] = merged_fcalc
-			sns.regplot(x=x2, y=y2, marker='+',ax=ax)
-			af =  AnnoteFinder(merged_fobs,merged_fcalc, zip(Fobs.indices(),ds), ax=ax)
+			af = AnnoteFinder(merged_fobs,merged_fcalc, zip(Fobs.indices(),ds), ax=ax)
 			fig.canvas.mpl_connect('button_press_event', af)
-			axfit = plt.axes([0.8, 0.9, 0.12, 0.075])
-			bfit = PLTButtonClickProcessor(axfit, 'Fit')
-			axclear = plt.axes([0.65, 0.9, 0.12, 0.075])
-			bclear = PLTButtonClickProcessor(axclear, 'Clear')
-			axchoose = plt.axes([0.50, 0.9, 0.12, 0.075])
-			bclear = PLTButtonClickProcessor(axchoose, 'Choose')
+			self.fit_window = FitWindow(ax=ax,data=zip(merged_fobs,merged_fcalc))
+			sns.regplot(x=x2,y=y2,x_ci=None,ci=None,marker='+',ax=ax)
 			plt.show()
 			
 		except Exception as e:
@@ -579,6 +578,7 @@ class File_Window(QMainWindow):
 		self.setFixedSize(self.size())
 		self.setWindowIcon(QIcon('gear-tools.png'))  
 		self.setWindowFlags(QtCore.Qt.WindowCloseButtonHint | QtCore.Qt.WindowMinimizeButtonHint)
+		self.setWindowTitle('File Viewer')
 		
 	def home(self):
 		self.txt_browser = QTextBrowser(self)
@@ -591,26 +591,113 @@ class File_Window(QMainWindow):
 			content = fp.read()
 		self.txt_browser.setText(content)
 		
-class PLTButtonClickProcessor(object):
-	def __init__(self,axes,label):
-		self.label = label
-		self.button = Button(axes, label)
-		self.button.on_clicked(self.process)
+class FitWindow(QMainWindow):
+	def __init__(self,ax,data):
+		super(FitWindow,self).__init__()
+		self.initUI()
+		self.home()
+		self.show()
+		self.chosen = [[]]
+		self.ax = ax
+		self.data = data
 		
-	def process(self,event):
-		if self.label == 'Choose':
-			self.pts_chosen = plt.ginput(n=-1,timeout=-1,show_clicks=True)
-		elif self.label == 'Clear':
-			pass
-		elif self.label == 'Fit':
-			pass
-		else:
+	def initUI(self):
+		self.setGeometry(400, 400, 300, 115)
+		self.setFixedSize(self.size())
+		self.setWindowIcon(QIcon('gear-tools.png'))  
+		self.setWindowFlags(QtCore.Qt.WindowCloseButtonHint | QtCore.Qt.WindowMinimizeButtonHint)
+		self.setWindowTitle('Fit Window')
+		
+	def home(self):
+		self.btn_fit = QPushButton("Fit", self)
+		self.btn_fit.move(5, 5)
+		self.btn_fit.resize(90, 50)
+		self.btn_fit.clicked.connect(self.fit)
+		self.btn_clear = QPushButton("Clear", self)
+		self.btn_clear.move(105, 5)
+		self.btn_clear.resize(90, 50)
+		self.btn_clear.clicked.connect(self.clear)
+		self.btn_choose = QPushButton("Choose", self)
+		self.btn_choose.move(205, 5)
+		self.btn_choose.resize(90, 50)
+		self.btn_choose.clicked.connect(self.choose)
+		self.btn_save = QPushButton("Save", self)
+		self.btn_save.move(5, 60)
+		self.btn_save.resize(90, 50)
+		self.btn_save.clicked.connect(self.save)
+		
+	def fit(self):
+		try:
+			if len(self.chosen[0]) == 0:
+				raise
+			x,y = zip(*self.chosen)
+			x=np.array(x).reshape(-1,1)
+			y=np.array(y).reshape(-1,1)
+			regr = linear_model.LinearRegression()
+			regr.fit(x,y)
+			pred = regr.predict(x)
+			print 'Coefficients: {}'.format(regr.coef_)
+			print 'Mean squared error: {:.2f}'.format(mean_squared_error(y,pred))
+			print 'Variance score: {:.2f}'.format(r2_score(y,pred))
+			data1,data2 = zip(*self.data)
+			data1 = np.array(data1)
+			data2 = np.array(data2)
+			x = np.array(range(int(data1.min()),int(data1.max()))).reshape(-1,1)
+			pred = regr.predict(x)
+			self.ax.plot(x.reshape(1,-1)[0],pred.reshape(1,-1)[0])
+			plt.draw()
+		except:
 			msgBox = QMessageBox()
 			msgBox.setIcon(QMessageBox.Critical)
-			msgBox.setText("An Error Has Ocurred While Trying To Execute This Process!")
+			msgBox.setText("An Error Has Ocurred while trying to Fit chosen fobs and fcalc!")
 			msgBox.setWindowTitle("Error")
 			msgBox.exec_()
 		
+	def clear(self):
+		lines = self.ax.lines
+		if len(lines) == 0:
+			msgBox = QMessageBox()
+			msgBox.setIcon(QMessageBox.Critical)
+			msgBox.setText("No lines to remove!")
+			msgBox.setWindowTitle("Error")
+			msgBox.exec_()
+		else:
+			line = lines.pop(0)
+			del line
+			plt.draw()
+			
+	def choose(self):
+		figure1 = plt.figure()
+		ax1 = figure1.add_subplot(111)
+		x,y = zip(*self.data)
+		ax1.scatter(x=x,y=y,marker='+',alpha=0.7)
+		input = figure1.ginput(n=-1,timeout=30,show_clicks=True)
+		path = Path(input)
+		selected_pts = np.nonzero(path.contains_points(self.data))
+		figure1.show()
+		self.chosen = np.array(self.data)[selected_pts[0]]
+	
+	def save(self):
+		try:
+			if len(self.chosen[0]) == 0:
+				raise Exception()
+			x,y = zip(*self.chosen)
+			save_data={}
+			save_data['Fobs'] = x
+			save_data['Fcalc'] = y
+			options = QFileDialog.Options()
+			options |= QFileDialog.DontUseNativeDialog
+			save_name, _ = QFileDialog.getSaveFileName(self,"Save Chosen Fobs Fcalc", "",\
+													"JSON (*.json);;All (*)",options=options)
+			with open(save_name,'w') as fp:
+				json.dump(save_data,fp,indent=4)		
+		except:
+			msgBox = QMessageBox()
+			msgBox.setIcon(QMessageBox.Critical)
+			msgBox.setText("An Error Has Ocurred while trying to save chosen fobs and fcalc!")
+			msgBox.setWindowTitle("Error")
+			msgBox.exec_()
+			
 class AnnoteFinder(object):
     """callback for matplotlib to display an annotation when points are
     clicked on.  The point which is closest to the click and within
