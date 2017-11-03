@@ -23,6 +23,7 @@ from iotbx.reflection_file_reader import any_reflection_file
 import seaborn as sns; sns.set(color_codes=True)
 from sklearn import linear_model
 from sklearn.metrics import mean_squared_error,r2_score
+from numba import jit
 
 class Main_Window(QMainWindow):
     
@@ -454,107 +455,128 @@ class Main_Window(QMainWindow):
 		self.combo.addItem('xray-it1992','it1992')
 		self.combo.move(185,230)
 		self.combo.resize(150,35)
-		
+	
 	def plot_Fcalc_Fobs(self):
 		self.resolution = float(self.textbox5.text())
 		self.scaling_factor = float(self.textbox6.text())
-		try:
-			if self.cb1_1.checkState():#1 get Fobs from mtz file
-				mtz_file = self.read_mtz(self.textbox1.text())
-				Fobs = mtz_file.as_miller_arrays()[2]
+		#try:
+		if self.cb1_1.checkState():#1 get Fobs from mtz file
+			mtz_file = self.read_mtz(self.textbox1.text())
+			Fobs = mtz_file.as_miller_arrays()[2]
+			Fobs_ds = Fobs.d_spacings().data()
+			Fobs_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fobs.indices()),\
+								data=np.array([Fobs.data()*self.scaling_factor,Fobs_ds]).transpose())
+		elif self.cb2_1.checkState():#2 get Fobs from fcf file
+			fcf_file = self.read_fcf(self.textbox3.text())
+			model = dict(fcf_file.file_content().model().items()[0][1])
+			if model['_shelx_refln_list_code'] is '6':
+				Fobs = fcf_file.as_miller_arrays()[1] #This Fobs is Fobs^2 but in order to be more convinient for me just call it Fobs
+				Fobs_ds = Fobs.d_spacings().data()
+				Fobs_data = np.array(Fobs.data())
+				Fobs_data[Fobs_data<0] = 0
 				Fobs_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fobs.indices()),\
-									data=np.array(Fobs.data()*self.scaling_factor))
-			elif self.cb2_1.checkState():#2 get Fobs from fcf file
+								data=np.array([np.sqrt(Fobs_data)*self.scaling_factor,Fobs_ds]).transpose())
+			elif model['_shelx_refln_list_code'] is '4':
+				Fobs = fcf_file.as_miller_arrays()[1] #This Fobs is Fobs^2 but in order to be more convinient for me just call it Fobs
+				Fobs_ds = Fobs.d_spacings().data()
+				Fobs_data = np.array(Fobs.data())
+				Fobs_data[Fobs_data<0] = 0
+				Fobs_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fobs.indices()),\
+								data=np.array([np.sqrt(Fobs_data)*self.scaling_factor,Fobs_ds]).transpose())
+			elif model['_shelx_refln_list_code'] is '3':
+				Fobs = fcf_file.as_miller_arrays()[1]
+				Fobs_ds = Fobs.d_spacings().data()
+				Fobs_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fobs.indices()),\
+								data=np.array([Fobs.data()*self.scaling_factor,Fobs_ds]).transpose())
+		elif self.cb3_1.checkState():
+			cif_file = self.read_cif_reflections(str(self.textbox4.text()))
+			Fobs = cif_file.as_miller_arrays()[0]
+			if type(Fobs.data()[0]) is complex:
+				Fobs = cif_file.as_miller_arrays()[1]
+			Fobs_ds = Fobs.d_spacings().data()
+			Fobs_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fobs.indices()),\
+								data=np.array([Fobs.data()*self.scaling_factor,Fobs_ds]).transpose())
+
+	#-------------------------------------------------------------------------------
+		if self.cb1.checkState():#1 get Fcalc by calculating the structure factor from pdb file
+			self.scatfact_table = str(self.combo.currentData())
+			pdb_structure = self.read_pdb(str(self.textbox2.text()))
+			Fcalc = self.calc_structure_factors(pdb_structure,dmin=self.resolution,table=self.scatfact_table)
+			Fcalc_data = Fcalc.data()
+			Fcalc_indices = Fcalc.indices()
+			Fcalc_ds = Fcalc.d_spacings().data()
+			Fcalc_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fcalc_indices),\
+								data=np.array([np.abs(Fcalc_data),Fcalc_ds]).transpose())
+			
+		elif self.cb2.checkState():#2 get Fcalc by calculating the structure factor from cif file
+			self.scatfact_table = str(self.combo.currentData())
+			cif_structures = self.read_cif(str(self.textbox4.text()))
+			for name, cif_structure in cif_structures.items():
+				Fcalc = self.calc_structure_factors(cif_structure,dmin=self.resolution,table=self.scatfact_table)
+				break #abandon any more structures in the cif file, if there is any, only read the first one
+			Fcalc_P1 = Fcalc.expand_to_p1()
+			Fcalc_data = Fcalc_P1.data()
+			Fcalc_indices = Fcalc_P1.indices()
+			Fcalc_ds = Fcalc_P1.d_spacings().data()
+			Fcalc_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fcalc_indices),\
+								data=np.array([np.abs(Fcalc_data),Fcalc_ds]).transpose())
+			
+		elif self.cb3.checkState():#3 get Fcalc from mtz file
+			if not self.cb1_1.checkState():
+				mtz_file = self.read_mtz(self.textbox1.text())
+			Fcalc = mtz_file.as_miller_arrays()[3]
+			Fcalc_ds = Fcalc.d_spacings().data()
+			Fcalc_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fcalc.indices()),\
+								data=np.array([np.abs(Fcalc.data()),Fcalc_ds]).transpose())
+
+		elif self.cb4.checkState():#4 get Fcalc from fcf file
+			if not self.cb2_1.checkState():
 				fcf_file = self.read_fcf(self.textbox3.text())
 				model = dict(fcf_file.file_content().model().items()[0][1])
-				if model['_shelx_refln_list_code'] is '6':
-					Fobs = fcf_file.as_miller_arrays()[1] #This Fobs is Fobs^2 but in order to be more convinient for me just call it Fobs
-					Fobs_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fobs.indices()),\
-									data=np.sqrt(Fobs.data())*self.scaling_factor)
-				elif model['_shelx_refln_list_code'] is '4':
-					Fobs = fcf_file.as_miller_arrays()[1] #This Fobs is Fobs^2 but in order to be more convinient for me just call it Fobs
-					Fobs_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fobs.indices()),\
-									data=np.sqrt(Fobs.data())*self.scaling_factor)
-				elif model['_shelx_refln_list_code'] is '3':
-					Fobs = fcf_file.as_miller_arrays()[1]
-					Fobs_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fobs.indices()),\
-									data=np.array(Fobs.data())*self.scaling_factor)
-			elif self.cb3_1.checkState():
-				cif_file = self.read_cif_reflections(str(self.textbox4.text()))
-				Fobs = cif_file.as_miller_arrays()[0]
-				Fobs_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fobs.indices()),\
-									data=np.array(Fobs.data()*self.scaling_factor))
-
-		#-------------------------------------------------------------------------------
-			if self.cb1.checkState():#1 get Fcalc by calculating the structure factor from pdb file
-				self.scatfact_table = str(self.combo.currentData())
-				pdb_structure = self.read_pdb(str(self.textbox2.text()))
-				Fcalc = self.calc_structure_factors(pdb_structure,dmin=self.resolution,table=self.scatfact_table)
-				Fcalc_data = Fcalc.data()
-				Fcalc_indices = Fcalc.indices()
-				Fcalc_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fcalc_indices),data=np.abs(Fcalc_data))
 				
-			elif self.cb2.checkState():#2 get Fcalc by calculating the structure factor from cif file
-				self.scatfact_table = str(self.combo.currentData())
-				cif_structures = self.read_cif(str(self.textbox4.text()))
-				for name, cif_structure in cif_structures.items():
-					Fcalc = self.calc_structure_factors(cif_structure,dmin=self.resolution,table=self.scatfact_table)
-					break #abandon any more structures in the cif file, if there is any, only read the first one
-				Fcalc_P1 = Fcalc.expand_to_p1()
-				Fcalc_data = Fcalc_P1.data()
-				Fcalc_indices = Fcalc_P1.indices()
-				Fcalc_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fcalc_indices),data=np.abs(Fcalc_data))
-				
-			elif self.cb3.checkState():#3 get Fcalc from mtz file
-				if not self.cb1_1.checkState():
-					mtz_file = self.read_mtz(self.textbox1.text())
-				Fcalc = mtz_file.as_miller_arrays()[3]
-				Fcalc_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fcalc.indices()),data=np.abs(Fcalc.data()))
-
-			elif self.cb4.checkState():#4 get Fcalc from fcf file
-				if not self.cb2_1.checkState():
-					fcf_file = self.read_fcf(self.textbox3.text())
-					model = dict(fcf_file.file_content().model().items()[0][1])
-					
-				if model['_shelx_refln_list_code'] is '6':
-					Fcalc = fcf_file.as_miller_arrays()[0]
-					Fcalc_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fcalc.indices()),\
-									data=np.abs(Fcalc.data())*self.scaling_factor)
-				elif model['_shelx_refln_list_code'] is '4':
-					Icalc = fcf_file.as_miller_arrays()[0]
-					Fcalc_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Icalc.indices()),\
-									data=np.sqrt(Icalc.data())*self.scaling_factor)
-				elif model['_shelx_refln_list_code'] is '3':
-					Fcalc = fcf_file.as_miller_arrays()[0]
-					Fcalc_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fcalc.indices()),\
-									data=np.abs(Fcalc.data())*self.scaling_factor)
-				
-		#-------------------------------------------------------------------------------
-		
-			merged_fobs = []
-			merged_fcalc = []
-			for i in Fobs.indices():
-				merged_fobs.append(Fobs_DF.loc[i][0])
-				merged_fcalc.append(Fcalc_DF.loc[i][0])
-			ds = Fobs.d_spacings().data()
-			fig,ax = plt.subplots()
-			x2, y2 = pd.Series(merged_fobs, name="F_obs"), pd.Series(merged_fcalc, name="F_model")
-			self.saved_Data['Fobs'] = merged_fobs
-			self.saved_Data['Fcalc'] = merged_fcalc
-			af = AnnoteFinder(merged_fobs,merged_fcalc, zip(Fobs.indices(),ds), ax=ax)
-			fig.canvas.mpl_connect('button_press_event', af)
-			self.fit_window = FitWindow(ax=ax,data=zip(merged_fobs,merged_fcalc))
-			sns.regplot(x=x2,y=y2,x_ci=None,ci=None,marker='+',ax=ax)
-			plt.show()
+			if model['_shelx_refln_list_code'] is '6':
+				Fcalc = fcf_file.as_miller_arrays()[0]
+				Fcalc_ds = Fcalc.d_spacings().data()
+				Fcalc_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fcalc.indices()),\
+								data=np.array([np.abs(Fcalc.data()),Fcalc_ds]).transpose())
+			elif model['_shelx_refln_list_code'] is '4':
+				Fcalc = fcf_file.as_miller_arrays()[0]
+				Fcalc_ds = Fcalc.d_spacings().data()
+				Fcalc_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fcalc.indices()),\
+								data=np.array([np.sqrt(Fcalc.data()),Fcalc_ds]).transpose())
+			elif model['_shelx_refln_list_code'] is '3':
+				Fcalc = fcf_file.as_miller_arrays()[0]
+				Fcalc_ds = Fcalc.d_spacings().data()
+				Fcalc_DF = pd.DataFrame(index=pd.MultiIndex.from_tuples(Fcalc.indices()),\
+								data=np.array([np.abs(Fcalc.data()),Fcalc_ds]).transpose())
 			
-		except Exception as e:
-			exc_type, exc_obj, exc_tb = sys.exc_info()
-			tb = traceback.extract_tb(exc_tb)[0]
-			msgBox = QMessageBox()
-			msgBox.setIcon(QMessageBox.Critical)
-			msgBox.setText("An Error Has Ocurred!\n{}\nAt Line: {} In Function: {}".format(e.args[0], str(tb[1]), tb[2]))
-			msgBox.setWindowTitle("Error")
-			msgBox.exec_()
+	#-------------------------------------------------------------------------------
+	
+		merged_DF = Fobs_DF.merge(Fcalc_DF,how='inner',left_index=True,right_index=True,suffixes=('_Fobs', '_Fcalc'))
+		merged_fobs = merged_DF['0_Fobs'].values.tolist()
+		merged_fcalc = merged_DF['0_Fcalc'].values.tolist()
+		fig,ax = plt.subplots()
+		x2, y2 = pd.Series(merged_fobs, name="F_obs"), pd.Series(merged_fcalc, name="F_model")
+		self.saved_Data['Fobs'] = merged_fobs
+		self.saved_Data['Fcalc'] = merged_fcalc
+		index = merged_DF.index.tolist()
+		ds = merged_DF['1_Fobs'].values.tolist()
+		af = AnnoteFinder(merged_fobs,merged_fcalc, zip(index,ds), ax=ax)
+		fig.canvas.mpl_connect('button_press_event', af)
+		self.fit_window = FitWindow(ax=ax,data=zip(merged_fobs,merged_fcalc))
+		sns.regplot(x=x2,y=y2,x_ci=None,ci=None,marker='+',ax=ax)
+		plt.show()
+			
+		#except Exception as e:
+		#	exc_type, exc_obj, exc_tb = sys.exc_info()
+		#	tb = traceback.extract_tb(exc_tb)[0]
+		#	msgBox = QMessageBox()
+		#	msgBox.setIcon(QMessageBox.Critical)
+		#	#msgBox.setText("An Error Has Ocurred!\n{}\nAt Line: {} In Function: {}".format(e.args[0], str(tb[1]), tb[2]))
+		#	msgBox.setText("An Error Has Ocurred!")
+		#	msgBox.setWindowTitle("Error")
+		#	msgBox.exec_()
+		
 			
 class File_Window(QMainWindow):
 	def __init__(self,f):
@@ -627,31 +649,33 @@ class FitWindow(QMainWindow):
 		self.btn_save.clicked.connect(self.save)
 		
 	def fit(self):
-		try:
-			if len(self.chosen[0]) == 0:
-				raise
-			x,y = zip(*self.chosen)
-			x=np.array(x).reshape(-1,1)
-			y=np.array(y).reshape(-1,1)
-			regr = linear_model.LinearRegression()
-			regr.fit(x,y)
-			pred = regr.predict(x)
-			print 'Coefficients: {}'.format(regr.coef_)
-			print 'Mean squared error: {:.2f}'.format(mean_squared_error(y,pred))
-			print 'Variance score: {:.2f}'.format(r2_score(y,pred))
-			data1,data2 = zip(*self.data)
-			data1 = np.array(data1)
-			data2 = np.array(data2)
-			x = np.array(range(int(data1.min()),int(data1.max()))).reshape(-1,1)
-			pred = regr.predict(x)
-			self.ax.plot(x.reshape(1,-1)[0],pred.reshape(1,-1)[0])
-			plt.draw()
-		except:
-			msgBox = QMessageBox()
-			msgBox.setIcon(QMessageBox.Critical)
-			msgBox.setText("An Error Has Ocurred while trying to Fit chosen fobs and fcalc!")
-			msgBox.setWindowTitle("Error")
-			msgBox.exec_()
+		#try:
+		if len(self.chosen[0]) == 0:
+			raise
+		x,y = zip(*self.chosen)
+		x=np.array(x).reshape(-1,1)
+		y=np.array(y).reshape(-1,1)
+		regr = linear_model.LinearRegression()
+		regr.fit(x,y)
+		pred = regr.predict(x)
+		print 'Coefficients: {}'.format(regr.coef_)
+		print 'Mean squared error: {:.2f}'.format(mean_squared_error(y,pred))
+		print 'Variance score: {:.2f}'.format(r2_score(y,pred))
+		data1,data2 = zip(*self.data)
+		data1 = np.array(data1)
+		data1 = data1[~np.isnan(data1)]
+		data2 = np.array(data2)
+		data2 = data2[~np.isnan(data2)]
+		x = np.array(range(int(data1.min()),int(data1.max()))).reshape(-1,1)
+		pred = regr.predict(x)
+		self.ax.plot(x.reshape(1,-1)[0],pred.reshape(1,-1)[0])
+		plt.draw()
+		#except:
+		#	msgBox = QMessageBox()
+		#	msgBox.setIcon(QMessageBox.Critical)
+		#	msgBox.setText("An Error Has Ocurred while trying to Fit chosen fobs and fcalc!")
+		#	msgBox.setWindowTitle("Error")
+		#	msgBox.exec_()
 		
 	def clear(self):
 		lines = self.ax.lines
