@@ -6,20 +6,20 @@ Compare the Fcalc and Fobs from the refinement result of Phenix and Shelxl. In M
 
 To use this software:
 
-> Install `Anaconda`: https://www.anaconda.com/download/ and add (PATH to Anaconda)/Script, (PATH to Anaconda), (PATH to Anaconda)/Library/bin to your $PATH
+* Install `Anaconda`: https://www.anaconda.com/download/ and add (PATH to Anaconda)/Script, (PATH to Anaconda), (PATH to Anaconda)/Library/bin to your $PATH
 
-> Install `pyqt5`: http://pyqt.sourceforge.net/Docs/PyQt5/installation.html or conda search pyqt and use conda install -c to install the package
+* Install `pyqt5`: http://pyqt.sourceforge.net/Docs/PyQt5/installation.html or conda search pyqt and use conda install -c to install the package
 
-> Install `DIALS` or `CCTBX`: http://dials.lbl.gov/installation.html or http://cci.lbl.gov/cctbx_build/
+* Install `DIALS` or `CCTBX`: http://dials.lbl.gov/installation.html or http://cci.lbl.gov/cctbx_build/
 
-> Install `seaborn`, `matplotlib`: conda search seaborn, conda search matplotlib
+* Install `seaborn`, `matplotlib`: conda search seaborn, conda search matplotlib
 
-> Install `CCP4` and add (PATH to CCP4)/(version)/bin to your $PATH
+* Install `CCP4` and add (PATH to CCP4)/(version)/bin to your $PATH
 
 After `Dials` or `CCTBX` is installed, set environmental variables:
 
->$LIBTBX_BUILD as the build folder in the dials folder and also set
+*$LIBTBX_BUILD as the build folder in the dials folder and also set
 
->PYTHONPATH=%LIBTBX_BUILD%\..\modules;%LIBTBX_BUILD%\..\modules\cctbx_project;%LIBTBX_BUILD%\..\modules\cctbx_project\boost_adaptbx;%LIBTBX_BUILD%\..\modules\cctbx_project\libtbx\pythonpath;%LIBTBX_BUILD%\lib;
+*PYTHONPATH=%LIBTBX_BUILD%\..\modules;%LIBTBX_BUILD%\..\modules\cctbx_project;%LIBTBX_BUILD%\..\modules\cctbx_project\boost_adaptbx;%LIBTBX_BUILD%\..\modules\cctbx_project\libtbx\pythonpath;%LIBTBX_BUILD%\lib;
 
 This will allow you to use functions in cctbx in python
