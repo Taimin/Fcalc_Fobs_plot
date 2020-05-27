@@ -18,8 +18,8 @@ To use this software:
 
 After `Dials` or `CCTBX` is installed, set environmental variables:
 
-*$LIBTBX_BUILD as the build folder in the dials folder and also set
+* $LIBTBX_BUILD as the build folder in the dials folder and also set
 
-*PYTHONPATH=%LIBTBX_BUILD%\..\modules;%LIBTBX_BUILD%\..\modules\cctbx_project;%LIBTBX_BUILD%\..\modules\cctbx_project\boost_adaptbx;%LIBTBX_BUILD%\..\modules\cctbx_project\libtbx\pythonpath;%LIBTBX_BUILD%\lib;
+* PYTHONPATH=%LIBTBX_BUILD%\..\modules;%LIBTBX_BUILD%\..\modules\cctbx_project;%LIBTBX_BUILD%\..\modules\cctbx_project\boost_adaptbx;%LIBTBX_BUILD%\..\modules\cctbx_project\libtbx\pythonpath;%LIBTBX_BUILD%\lib;
 
 This will allow you to use functions in cctbx in python
